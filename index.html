@@ -149,38 +149,28 @@
     const tbody = document.getElementById("results");
     const forceSlider = document.getElementById("force");
     const forceValue = document.getElementById("forceValue");
-
     const canvas = document.getElementById("graph");
     const ctx = canvas.getContext("2d");
-
     const graphContainer = document.getElementById("graphContainer");
     const toggleGraphBtn = document.getElementById("toggleGraphBtn");
     let graphVisible = true;
 
-    // --- Canvas jabalinas ---
     const jCanvas = document.getElementById("javelin");
     const jCtx = jCanvas.getContext("2d");
 
-    // Rango de la gráfica
-    const xMin = 0, xMax = 8;
-    const yMin = 0, yMax = 35;
-    const margin = 50;
-
-    // x elegido por cada equipo (null al principio)
+    const xMin = 0, xMax = 8, yMin = 0, yMax = 35, margin = 50;
     let chosenX = [null, null, null, null];
 
-    // Pista jabalina
-    const lanesY = [60, 120, 180, 240];      // líneas base de cada carril
+    const lanesY = [60, 120, 180, 240];
     const startX = 80;
-    const maxDistanceForScale = 35;          // distancia máx para escalar
+    const maxDistanceForScale = 35;
     const endX = jCanvas.width - 80;
     const xScale = (endX - startX) / maxDistanceForScale;
-    const arcHeight = 55;                    // altura máxima del arco
+    const arcHeight = 55;
 
-    // Estado de animación de la jabalina por equipo
     let javelinStates = teams.map(() => ({
         active: false,
-        t: 0,          // parámetro de 0 a 1
+        t: 0,
         startX,
         endX: startX,
         laneY: 0
@@ -197,54 +187,38 @@
     function drawAxes() {
         ctx.strokeStyle = "#888";
         ctx.lineWidth = 1;
-
-        // Eje X
         ctx.beginPath();
         ctx.moveTo(xToScreen(xMin), yToScreen(0));
         ctx.lineTo(xToScreen(xMax), yToScreen(0));
         ctx.stroke();
-
-        // Eje Y
         ctx.beginPath();
         ctx.moveTo(xToScreen(0), yToScreen(yMin));
         ctx.lineTo(xToScreen(0), yToScreen(yMax));
         ctx.stroke();
-
         ctx.fillStyle = "#ccc";
         ctx.font = "12px sans-serif";
 
-        // Marcas en X
         for (let x = xMin; x <= xMax; x++) {
             const sx = xToScreen(x);
             const sy = yToScreen(0);
-            ctx.beginPath();
             ctx.moveTo(sx, sy - 4);
             ctx.lineTo(sx, sy + 4);
             ctx.stroke();
             ctx.fillText(x.toString(), sx - 5, sy + 16);
         }
-
-        // Marcas en Y (cada 5 unidades)
         for (let y = yMin; y <= yMax; y += 5) {
             const sx = xToScreen(0);
             const sy = yToScreen(y);
-            ctx.beginPath();
             ctx.moveTo(sx - 4, sy);
             ctx.lineTo(sx + 4, sy);
             ctx.stroke();
             ctx.fillText(y.toString(), sx - 30, sy + 4);
         }
-
-        // Etiquetas
-        ctx.fillText("x (fuerza)", canvas.width - margin - 40, yToScreen(0) + 30);
-        ctx.fillText("d(x) (distancia)", xToScreen(0) - 40, margin - 10);
     }
 
     function drawCurves(xCurrent) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         drawAxes();
-
-        // Dibujar curvas
         teams.forEach(team => {
             ctx.beginPath();
             ctx.lineWidth = 2;
@@ -257,13 +231,9 @@
                 if (first) {
                     ctx.moveTo(sx, sy);
                     first = false;
-                } else {
-                    ctx.lineTo(sx, sy);
-                }
+                } else ctx.lineTo(sx, sy);
             }
             ctx.stroke();
-
-            // Punto del lanzamiento actual (slider)
             const yCurrent = team.formula(xCurrent);
             ctx.fillStyle = team.colorStroke;
             ctx.beginPath();
@@ -274,12 +244,9 @@
 
     function drawJavelinScene() {
         jCtx.clearRect(0, 0, jCanvas.width, jCanvas.height);
-
-        // Fondo césped
         jCtx.fillStyle = "#123012";
         jCtx.fillRect(0, 0, jCanvas.width, jCanvas.height);
 
-        // Líneas de distancia verticales (cada 5 unidades)
         jCtx.strokeStyle = "#295929";
         jCtx.lineWidth = 1;
         jCtx.font = "11px sans-serif";
@@ -294,52 +261,38 @@
             jCtx.fillText(d.toString(), x - 8, 25);
         }
 
-        // Carriles y atletas
         teams.forEach((team, i) => {
             const laneY = lanesY[i];
-
-            // Línea base del carril
             jCtx.strokeStyle = "#3f7a3f";
             jCtx.beginPath();
             jCtx.moveTo(40, laneY + 10);
             jCtx.lineTo(jCanvas.width - 40, laneY + 10);
             jCtx.stroke();
-
-            // Atleta (simple muñeco)
             jCtx.fillStyle = team.colorStroke;
-            // cuerpo
             jCtx.fillRect(startX - 20, laneY - 15, 12, 24);
-            // cabeza
             jCtx.beginPath();
             jCtx.arc(startX - 14, laneY - 22, 6, 0, Math.PI * 2);
             jCtx.fill();
-
-            // Nombre del equipo
             jCtx.fillStyle = "#ffffff";
             jCtx.fillText(team.color + " " + team.name, 10, laneY - 25);
         });
 
-        // Jabalinas
         teams.forEach((team, i) => {
             const state = javelinStates[i];
             const laneY = lanesY[i];
-
             let x, y;
             if (state.t <= 0 || !state.animating) {
-                // Jabalina en reposo (junto al atleta)
                 x = startX + 10;
                 y = laneY - 5;
             } else {
-                // Parábola suave: x(t) lineal, y(t) = base - arco * 4t(1-t)
                 const t = state.t;
                 x = state.startX + (state.endX - state.startX) * t;
                 const baseY = laneY - 5;
                 const arc = state.arcHeight;
-                const offsetY = arc * (4 * t * (1 - t)); // máximo en t=0.5
+                const offsetY = arc * (4 * t * (1 - t));
                 y = baseY - offsetY;
             }
 
-            // Dibujo de la jabalina: una línea inclinada
             jCtx.strokeStyle = "#f5f5f5";
             jCtx.lineWidth = 2;
             jCtx.beginPath();
@@ -347,7 +300,13 @@
             jCtx.lineTo(x + 18, y - 5);
             jCtx.stroke();
 
-            // Puntero/estrella al final cuando termina el vuelo
+            if (state.t > 0) {
+                const distNow = Math.max(0, (x - startX) / xScale);
+                jCtx.fillStyle = "#ffffff";
+                jCtx.font = "11px sans-serif";
+                jCtx.fillText(distNow.toFixed(1) + " m", x + 25, y - 5);
+            }
+
             if (!state.animating && state.t > 0) {
                 jCtx.fillStyle = team.colorStroke;
                 jCtx.beginPath();
@@ -360,23 +319,14 @@
     function updateTableAndGraph() {
         const x = parseFloat(forceSlider.value);
         forceValue.textContent = x.toFixed(1);
-
-        // Calcular distancias con el valor del slider
-        const results = teams.map(t => ({
-            ...t,
-            distance: t.formula(x)
-        }));
-
-        // Determinar ganador según el slider
+        const results = teams.map(t => ({ ...t, distance: t.formula(x) }));
         const maxDist = Math.max(...results.map(r => r.distance));
 
-        // Actualizar tabla
         tbody.innerHTML = "";
         results.forEach((r, index) => {
             const tr = document.createElement("tr");
             if (r.distance === maxDist) tr.classList.add("winner");
 
-            // Distancia con x elegido (si existe)
             let chosen = chosenX[index];
             let chosenDistText = "";
             if (chosen !== null && !isNaN(chosen)) {
@@ -385,120 +335,72 @@
             }
 
             tr.innerHTML = `
-          <td>${r.color} ${r.name}</td>
-          <td class="formula">d(x) = ${r.formula.toString().replace("x => ", "")}</td>
-          <td>${r.distance.toFixed(2)}</td>
-          <td><input type="number" class="team-x" min="0" max="8" step="0.1" id="chosen-${index}"></td>
-          <td>${chosenDistText}</td>
-        `;
+              <td>${r.color} ${r.name}</td>
+              <td class="formula">d(x) = ${r.formula.toString().replace("x => ", "")}</td>
+              <td>${r.distance.toFixed(2)}</td>
+              <td><input type="number" class="team-x" min="0" max="8" step="0.1" id="chosen-${index}"></td>
+              <td>${chosenDistText}</td>`;
             tbody.appendChild(tr);
 
             const input = tr.querySelector("input.team-x");
-            if (chosen !== null && !isNaN(chosen)) {
-                input.value = chosen;
-            }
-            input.addEventListener("input", (e) => {
+            if (chosen !== null && !isNaN(chosen)) input.value = chosen;
+            input.addEventListener("input", e => {
                 const val = parseFloat(e.target.value);
-                if (!isNaN(val)) {
-                    chosenX[index] = val;
-                } else {
-                    chosenX[index] = null;
-                }
+                chosenX[index] = !isNaN(val) ? val : null;
                 updateTableAndGraph();
             });
         });
 
-        // Gráfica si está visible
-        if (graphVisible) {
-            drawCurves(x);
-        }
-
-        // Redibujar pista/jabalinas (posición actual)
+        if (graphVisible) drawCurves(x);
         drawJavelinScene();
     }
 
     forceSlider.addEventListener("input", updateTableAndGraph);
 
-    // Toggle mostrar/ocultar gráfica
     toggleGraphBtn.addEventListener("click", () => {
         graphVisible = !graphVisible;
         graphContainer.style.display = graphVisible ? "block" : "none";
         toggleGraphBtn.textContent = graphVisible ? "Ocultar gráfica" : "Mostrar gráfica";
-        if (graphVisible) {
-            const x = parseFloat(forceSlider.value);
-            drawCurves(x);
-        }
+        if (graphVisible) drawCurves(parseFloat(forceSlider.value));
     });
 
-    // Lanzar jabalinas según x elegido por cada equipo
     function launchJavelins() {
         let algunoConX = false;
-
         teams.forEach((team, i) => {
             const x = chosenX[i];
             const state = javelinStates[i];
-
             if (x !== null && !isNaN(x)) {
                 algunoConX = true;
                 let dist = team.formula(x);
-                if (dist < 0) dist = 0;
-                if (dist > maxDistanceForScale) dist = maxDistanceForScale;
-
+                dist = Math.min(Math.max(dist, 0), maxDistanceForScale);
                 const end = startX + dist * xScale;
-
-                state.t = 0;
-                state.startX = startX + 10;
-                state.endX = end;
-                state.laneY = lanesY[i];
-                state.arcHeight = arcHeight;
-                state.animating = true;
-                state.active = true;
-            } else {
-                // sin x, se queda en reposo
-                state.t = 0;
-                state.animating = false;
-            }
+                Object.assign(state, { t: 0, startX: startX + 10, endX: end, laneY: lanesY[i], arcHeight, animating: true });
+            } else Object.assign(state, { t: 0, animating: false });
         });
-
-        if (!algunoConX) {
-            alert("Ningún equipo ha introducido un valor de x.");
-            return;
-        }
-
+        if (!algunoConX) return alert("Ningún equipo ha introducido un valor de x.");
         animateJavelins();
     }
 
     function animateJavelins() {
-        const duration = 60; // "frames"
+        const duration = 140;
         let frame = 0;
-
         function step() {
             frame++;
             let anyAnimating = false;
-
             javelinStates.forEach(state => {
                 if (state.animating) {
                     anyAnimating = true;
                     state.t = Math.min(1, frame / duration);
-                    if (state.t >= 1) {
-                        state.animating = false;
-                    }
+                    if (state.t >= 1) state.animating = false;
                 }
             });
-
             drawJavelinScene();
-
-            if (anyAnimating) {
-                requestAnimationFrame(step);
-            }
+            if (anyAnimating) requestAnimationFrame(step);
         }
-
         requestAnimationFrame(step);
     }
 
     document.getElementById("launchBtn").addEventListener("click", launchJavelins);
-
-    // Inicializar
     updateTableAndGraph();
 </script>
 
