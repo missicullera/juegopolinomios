@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Juego de Lanzadores - Polinomios Cúbicos</title>
+    <style>
+        body {
+            background: #1a1a1a;
+            color: white;
+            font-family: "Segoe UI", sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            margin-bottom: 10px;
+        }
+        #sliderContainer {
+            margin: 20px auto;
+        }
+        input[type="range"] {
+            width: 80%;
+        }
+        table {
+            width: 90%;
+            max-width: 1000px;
+            margin: 20px auto;
+            border-collapse: collapse;
+            background: #222;
+            border-radius: 10px;
+            overflow: hidden;
+            font-size: 0.95rem;
+        }
+        th, td {
+            padding: 8px;
+            border-bottom: 1px solid #444;
+        }
+        tr.winner {
+            background: #2e7d32;
+            color: #fff;
+            font-weight: bold;
+        }
+        tr:hover {
+            background: #333;
+        }
+        .formula {
+            font-size: 0.85rem;
+            color: #ccc;
+        }
+        #graphContainer {
+            margin: 20px auto;
+            width: 800px;
+            max-width: 100%;
+        }
+        #graph {
+            border: 1px solid #555;
+            background: #111;
+        }
+        input.team-x {
+            width: 70px;
+            text-align: center;
+            background: #111;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 2px 4px;
+        }
+        #graphToggleContainer {
+            margin-top: 10px;
+        }
+        #graphToggleContainer button,
+        #launchBtn {
+            padding: 6px 12px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            background: #1976d2;
+            color: #fff;
+            cursor: pointer;
+        }
+        #graphToggleContainer button:hover,
+        #launchBtn:hover {
+            background: #1565c0;
+        }
+        #javelinContainer {
+            margin: 30px auto 0;
+            width: 900px;
+            max-width: 100%;
+        }
+        #javelin {
+            border: 1px solid #555;
+            background: #0e1a0e;
+            display: block;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+
+<h1>🏹 Juego de Lanzadores – Polinomios cúbicos</h1>
+<p>
+    Mueve el <b>slider</b> para explorar la fuerza <b>x</b> (si quieres usar la gráfica).<br>
+    Cada equipo escribe en su casilla el <b>x</b> que ha deducido como mejor y se calcula su distancia.<br>
+    Luego pulsa <b>“Lanzar jabalinas”</b> para ver la animación estilo Hyper Olympics.
+</p>
+
+<div id="sliderContainer">
+    <label for="force">Fuerza (x): </label>
+    <input type="range" id="force" min="0" max="8" step="0.1" value="4">
+    <span id="forceValue">4</span>
+</div>
+
+<div id="graphToggleContainer">
+    <button id="toggleGraphBtn">Ocultar gráfica</button>
+</div>
+
+<div id="graphContainer">
+    <canvas id="graph" width="800" height="400"></canvas>
+</div>
+
+<table>
+    <thead>
+    <tr>
+        <th>Equipo</th>
+        <th>Polinomio</th>
+        <th>Distancia con slider d(x)</th>
+        <th>x elegido equipo</th>
+        <th>Distancia con x elegido</th>
+    </tr>
+    </thead>
+    <tbody id="results"></tbody>
+</table>
+
+<button id="launchBtn">Lanzar jabalinas</button>
+
+<div id="javelinContainer">
+    <canvas id="javelin" width="900" height="260"></canvas>
+</div>
+
+<script>
+    // --- Polinomios cúbicos (equilibrados) ---
+    const teams = [
+        { color: "🟢", name: "Equipo 1", colorStroke: "#4caf50", formula: x => -0.3*x**3 + 2.5*x**2 + 0.5*x },
+        { color: "🔵", name: "Equipo 2", colorStroke: "#2196f3", formula: x => -0.35*x**3 + 2.5*x**2 + 2*x },
+        { color: "🔴", name: "Equipo 3", colorStroke: "#f44336", formula: x => -0.4*x**3 + 3*x**2 + x },
+        { color: "🟡", name: "Equipo 4", colorStroke: "#ffeb3b", formula: x => -0.5*x**3 + 3*x**2 + 3*x },
+    ];
+
+    const tbody = document.getElementById("results");
+    const forceSlider = document.getElementById("force");
+    const forceValue = document.getElementById("forceValue");
+
+    const canvas = document.getElementById("graph");
+    const ctx = canvas.getContext("2d");
+
+    const graphContainer = document.getElementById("graphContainer");
+    const toggleGraphBtn = document.getElementById("toggleGraphBtn");
+    let graphVisible = true;
+
+    // --- Canvas jabalinas ---
+    const jCanvas = document.getElementById("javelin");
+    const jCtx = jCanvas.getContext("2d");
+
+    // Rango de la gráfica
+    const xMin = 0, xMax = 8;
+    const yMin = 0, yMax = 35;
+    const margin = 50;
+
+    // x elegido por cada equipo (null al principio)
+    let chosenX = [null, null, null, null];
+
+    // Pista jabalina
+    const lanesY = [60, 120, 180, 240];      // líneas base de cada carril
+    const startX = 80;
+    const maxDistanceForScale = 35;          // distancia máx para escalar
+    const endX = jCanvas.width - 80;
+    const xScale = (endX - startX) / maxDistanceForScale;
+    const arcHeight = 55;                    // altura máxima del arco
+
+    // Estado de animación de la jabalina por equipo
+    let javelinStates = teams.map(() => ({
+        active: false,
+        t: 0,          // parámetro de 0 a 1
+        startX,
+        endX: startX,
+        laneY: 0
+    }));
+
+    function xToScreen(x) {
+        return margin + (x - xMin) * (canvas.width - 2*margin) / (xMax - xMin);
+    }
+
+    function yToScreen(y) {
+        return canvas.height - margin - (y - yMin) * (canvas.height - 2*margin) / (yMax - yMin);
+    }
+
+    function drawAxes() {
+        ctx.strokeStyle = "#888";
+        ctx.lineWidth = 1;
+
+        // Eje X
+        ctx.beginPath();
+        ctx.moveTo(xToScreen(xMin), yToScreen(0));
+        ctx.lineTo(xToScreen(xMax), yToScreen(0));
+        ctx.stroke();
+
+        // Eje Y
+        ctx.beginPath();
+        ctx.moveTo(xToScreen(0), yToScreen(yMin));
+        ctx.lineTo(xToScreen(0), yToScreen(yMax));
+        ctx.stroke();
+
+        ctx.fillStyle = "#ccc";
+        ctx.font = "12px sans-serif";
+
+        // Marcas en X
+        for (let x = xMin; x <= xMax; x++) {
+            const sx = xToScreen(x);
+            const sy = yToScreen(0);
+            ctx.beginPath();
+            ctx.moveTo(sx, sy - 4);
+            ctx.lineTo(sx, sy + 4);
+            ctx.stroke();
+            ctx.fillText(x.toString(), sx - 5, sy + 16);
+        }
+
+        // Marcas en Y (cada 5 unidades)
+        for (let y = yMin; y <= yMax; y += 5) {
+            const sx = xToScreen(0);
+            const sy = yToScreen(y);
+            ctx.beginPath();
+            ctx.moveTo(sx - 4, sy);
+            ctx.lineTo(sx + 4, sy);
+            ctx.stroke();
+            ctx.fillText(y.toString(), sx - 30, sy + 4);
+        }
+
+        // Etiquetas
+        ctx.fillText("x (fuerza)", canvas.width - margin - 40, yToScreen(0) + 30);
+        ctx.fillText("d(x) (distancia)", xToScreen(0) - 40, margin - 10);
+    }
+
+    function drawCurves(xCurrent) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawAxes();
+
+        // Dibujar curvas
+        teams.forEach(team => {
+            ctx.beginPath();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = team.colorStroke;
+            let first = true;
+            for (let x = xMin; x <= xMax; x += 0.05) {
+                const y = team.formula(x);
+                const sx = xToScreen(x);
+                const sy = yToScreen(y);
+                if (first) {
+                    ctx.moveTo(sx, sy);
+                    first = false;
+                } else {
+                    ctx.lineTo(sx, sy);
+                }
+            }
+            ctx.stroke();
+
+            // Punto del lanzamiento actual (slider)
+            const yCurrent = team.formula(xCurrent);
+            ctx.fillStyle = team.colorStroke;
+            ctx.beginPath();
+            ctx.arc(xToScreen(xCurrent), yToScreen(yCurrent), 4, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    }
+
+    function drawJavelinScene() {
+        jCtx.clearRect(0, 0, jCanvas.width, jCanvas.height);
+
+        // Fondo césped
+        jCtx.fillStyle = "#123012";
+        jCtx.fillRect(0, 0, jCanvas.width, jCanvas.height);
+
+        // Líneas de distancia verticales (cada 5 unidades)
+        jCtx.strokeStyle = "#295929";
+        jCtx.lineWidth = 1;
+        jCtx.font = "11px sans-serif";
+        jCtx.fillStyle = "#cce6cc";
+
+        for (let d = 0; d <= maxDistanceForScale; d += 5) {
+            const x = startX + d * xScale;
+            jCtx.beginPath();
+            jCtx.moveTo(x, 30);
+            jCtx.lineTo(x, jCanvas.height - 20);
+            jCtx.stroke();
+            jCtx.fillText(d.toString(), x - 8, 25);
+        }
+
+        // Carriles y atletas
+        teams.forEach((team, i) => {
+            const laneY = lanesY[i];
+
+            // Línea base del carril
+            jCtx.strokeStyle = "#3f7a3f";
+            jCtx.beginPath();
+            jCtx.moveTo(40, laneY + 10);
+            jCtx.lineTo(jCanvas.width - 40, laneY + 10);
+            jCtx.stroke();
+
+            // Atleta (simple muñeco)
+            jCtx.fillStyle = team.colorStroke;
+            // cuerpo
+            jCtx.fillRect(startX - 20, laneY - 15, 12, 24);
+            // cabeza
+            jCtx.beginPath();
+            jCtx.arc(startX - 14, laneY - 22, 6, 0, Math.PI * 2);
+            jCtx.fill();
+
+            // Nombre del equipo
+            jCtx.fillStyle = "#ffffff";
+            jCtx.fillText(team.color + " " + team.name, 10, laneY - 25);
+        });
+
+        // Jabalinas
+        teams.forEach((team, i) => {
+            const state = javelinStates[i];
+            const laneY = lanesY[i];
+
+            let x, y;
+            if (state.t <= 0 || !state.animating) {
+                // Jabalina en reposo (junto al atleta)
+                x = startX + 10;
+                y = laneY - 5;
+            } else {
+                // Parábola suave: x(t) lineal, y(t) = base - arco * 4t(1-t)
+                const t = state.t;
+                x = state.startX + (state.endX - state.startX) * t;
+                const baseY = laneY - 5;
+                const arc = state.arcHeight;
+                const offsetY = arc * (4 * t * (1 - t)); // máximo en t=0.5
+                y = baseY - offsetY;
+            }
+
+            // Dibujo de la jabalina: una línea inclinada
+            jCtx.strokeStyle = "#f5f5f5";
+            jCtx.lineWidth = 2;
+            jCtx.beginPath();
+            jCtx.moveTo(x, y);
+            jCtx.lineTo(x + 18, y - 5);
+            jCtx.stroke();
+
+            // Puntero/estrella al final cuando termina el vuelo
+            if (!state.animating && state.t > 0) {
+                jCtx.fillStyle = team.colorStroke;
+                jCtx.beginPath();
+                jCtx.arc(state.endX + 18, laneY - 5, 4, 0, Math.PI * 2);
+                jCtx.fill();
+            }
+        });
+    }
+
+    function updateTableAndGraph() {
+        const x = parseFloat(forceSlider.value);
+        forceValue.textContent = x.toFixed(1);
+
+        // Calcular distancias con el valor del slider
+        const results = teams.map(t => ({
+            ...t,
+            distance: t.formula(x)
+        }));
+
+        // Determinar ganador según el slider
+        const maxDist = Math.max(...results.map(r => r.distance));
+
+        // Actualizar tabla
+        tbody.innerHTML = "";
+        results.forEach((r, index) => {
+            const tr = document.createElement("tr");
+            if (r.distance === maxDist) tr.classList.add("winner");
+
+            // Distancia con x elegido (si existe)
+            let chosen = chosenX[index];
+            let chosenDistText = "";
+            if (chosen !== null && !isNaN(chosen)) {
+                const dChosen = r.formula(chosen);
+                chosenDistText = dChosen.toFixed(2);
+            }
+
+            tr.innerHTML = `
+          <td>${r.color} ${r.name}</td>
+          <td class="formula">d(x) = ${r.formula.toString().replace("x => ", "")}</td>
+          <td>${r.distance.toFixed(2)}</td>
+          <td><input type="number" class="team-x" min="0" max="8" step="0.1" id="chosen-${index}"></td>
+          <td>${chosenDistText}</td>
+        `;
+            tbody.appendChild(tr);
+
+            const input = tr.querySelector("input.team-x");
+            if (chosen !== null && !isNaN(chosen)) {
+                input.value = chosen;
+            }
+            input.addEventListener("input", (e) => {
+                const val = parseFloat(e.target.value);
+                if (!isNaN(val)) {
+                    chosenX[index] = val;
+                } else {
+                    chosenX[index] = null;
+                }
+                updateTableAndGraph();
+            });
+        });
+
+        // Gráfica si está visible
+        if (graphVisible) {
+            drawCurves(x);
+        }
+
+        // Redibujar pista/jabalinas (posición actual)
+        drawJavelinScene();
+    }
+
+    forceSlider.addEventListener("input", updateTableAndGraph);
+
+    // Toggle mostrar/ocultar gráfica
+    toggleGraphBtn.addEventListener("click", () => {
+        graphVisible = !graphVisible;
+        graphContainer.style.display = graphVisible ? "block" : "none";
+        toggleGraphBtn.textContent = graphVisible ? "Ocultar gráfica" : "Mostrar gráfica";
+        if (graphVisible) {
+            const x = parseFloat(forceSlider.value);
+            drawCurves(x);
+        }
+    });
+
+    // Lanzar jabalinas según x elegido por cada equipo
+    function launchJavelins() {
+        let algunoConX = false;
+
+        teams.forEach((team, i) => {
+            const x = chosenX[i];
+            const state = javelinStates[i];
+
+            if (x !== null && !isNaN(x)) {
+                algunoConX = true;
+                let dist = team.formula(x);
+                if (dist < 0) dist = 0;
+                if (dist > maxDistanceForScale) dist = maxDistanceForScale;
+
+                const end = startX + dist * xScale;
+
+                state.t = 0;
+                state.startX = startX + 10;
+                state.endX = end;
+                state.laneY = lanesY[i];
+                state.arcHeight = arcHeight;
+                state.animating = true;
+                state.active = true;
+            } else {
+                // sin x, se queda en reposo
+                state.t = 0;
+                state.animating = false;
+            }
+        });
+
+        if (!algunoConX) {
+            alert("Ningún equipo ha introducido un valor de x.");
+            return;
+        }
+
+        animateJavelins();
+    }
+
+    function animateJavelins() {
+        const duration = 60; // "frames"
+        let frame = 0;
+
+        function step() {
+            frame++;
+            let anyAnimating = false;
+
+            javelinStates.forEach(state => {
+                if (state.animating) {
+                    anyAnimating = true;
+                    state.t = Math.min(1, frame / duration);
+                    if (state.t >= 1) {
+                        state.animating = false;
+                    }
+                }
+            });
+
+            drawJavelinScene();
+
+            if (anyAnimating) {
+                requestAnimationFrame(step);
+            }
+        }
+
+        requestAnimationFrame(step);
+    }
+
+    document.getElementById("launchBtn").addEventListener("click", launchJavelins);
+
+    // Inicializar
+    updateTableAndGraph();
+</script>
+
+</body>
+</html>
